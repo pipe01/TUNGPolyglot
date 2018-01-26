@@ -6,21 +6,21 @@ using System.Text;
 using UnityEngine.SceneManagement;
 using UnityEngine;
 using System.Net;
-using PiTung_Bootstrap;
+using PiTung_Bootstrap.Console;
 
 namespace Polyglot
 {
     class Client
     {
-        private static int defaultPort = 4545;
-        private string savesPath;
+        private const int defaultPort = 4545;
+        private static string savesPath;
 
-        private ClientConnection connection;
+        private static ClientConnection connection;
 
         public Client()
         {
-            Console.RegisterCommand("connect", this.Command_connect);
-            Console.RegisterCommand("disconnect", this.Command_disconnect);
+            IGConsole.RegisterCommand(new Command_connect());
+            IGConsole.RegisterCommand(new Command_disconnect());
             savesPath = Application.persistentDataPath + "/saves/multiplayer";
         }
 
@@ -30,21 +30,21 @@ namespace Polyglot
                 connection.HandlePackets();
         }
 
-        private void DeleteSave()
+        private static void DeleteSave()
         {
             string saveName = savesPath + "/_";
             if (File.Exists(saveName))
                 File.Delete(saveName);
         }
 
-        private void Connect(string address, int port)
+        private static void Connect(string address, int port)
         {
             if(connection != null && connection.Status == Status.Connected)
             {
-                Console.Error("Already connected, disconnect first");
+                IGConsole.Error("Already connected, disconnect first");
                 return;
             }
-            Console.Log($"Connecting to {address}:{port}");
+            IGConsole.Log($"Connecting to {address}:{port}");
             connection = new ClientConnection(address, port);
             if (!Directory.Exists(savesPath))
                 Directory.CreateDirectory(savesPath);
@@ -53,38 +53,53 @@ namespace Polyglot
             SceneManager.LoadScene("gameplay");
         }
 
-        private void Disconnect()
+        private static void Disconnect()
         {
             if(connection != null)
                 connection.Disconnect();
         }
 
-        private void Command_connect(IEnumerable<string> args)
+        private class Command_connect : Command
         {
-            if(args.Count() != 1)
+            public override string Name => "connect";
+            public override string Usage => $"{Name} host[:port]";
+
+            public override bool Execute(IEnumerable<string> arguments)
             {
-                Console.Log(LogType.ERROR, "Usage: connect host[:port]");
-                return;
+                if (arguments.Count() != 1)
+                {
+                    IGConsole.Error("Usage: connect host[:port]");
+                    return false;
+                }
+                string[] parts = arguments.ElementAt(0).Split(':');
+                int port = 4545;
+                if (parts.Length > 1)
+                    port = Int32.Parse(parts[1]);
+                Connect(parts[0], port);
+                return true;
             }
-            string[] parts = args.ElementAt(0).Split(':');
-            int port = 4545;
-            if (parts.Length > 1)
-                port = Int32.Parse(parts[1]);
-            Connect(parts[0], port);
         }
 
-        private void Command_disconnect(IEnumerable<string> args)
+        private class Command_disconnect : Command
         {
-            Console.Log("Disconnecting...");
-            Disconnect();
-            if (SceneManager.GetActiveScene().name == "gameplay")
+            public override string Name => "disconnect";
+            public override string Usage => $"{Name}";
+
+            public override bool Execute(IEnumerable<string> arguments)
             {
-                UIManager.UnlockMouseAndDisableFirstPersonLooking();
-                SceneManager.LoadScene("main menu");
-            }
-            else
-            {
-                Console.Log("Not currently connected");
+                IGConsole.Log("Disconnecting...");
+                Disconnect();
+                if (SceneManager.GetActiveScene().name == "gameplay")
+                {
+                    UIManager.UnlockMouseAndDisableFirstPersonLooking();
+                    SceneManager.LoadScene("main menu");
+                }
+                else
+                {
+                    IGConsole.Log("Not currently connected");
+                    return false;
+                }
+                return true;
             }
         }
     }
